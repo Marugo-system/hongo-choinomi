@@ -1,0 +1,1250 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#6E2430">
+<title>本郷通りちょい飲みマップ | プレゼン用プロトタイプ</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@500;700;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+tailwind.config = {
+  theme: {
+    extend: {
+      colors: {
+        wine: { 50:'#fdf2f3', 100:'#f8e4e6', 600:'#9a3040', 700:'#7c2432', 800:'#5e1c24', 900:'#3f1218' },
+        brand: { 500:'#f97316', 600:'#ea580c', 700:'#c2410c' }
+      },
+      fontFamily: { sans: ['Zen Maru Gothic', 'sans-serif'] }
+    }
+  }
+}
+</script>
+<style>
+  body {
+    font-family: 'Zen Maru Gothic', sans-serif;
+    background:
+      radial-gradient(900px 480px at 50% -10%, rgba(232,106,23,.28), transparent 60%),
+      #f3e4d8;
+    color: #2c1814;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .screen { display: none; }
+  .screen.is-active { display: block; }
+  .modal { display: none; position: fixed; inset: 0; z-index: 80; align-items: flex-end; justify-content: center; }
+  .modal.is-open { display: flex; }
+  #draft-banner { display: none; }
+  #draft-banner.is-on { display: flex; }
+  #toast {
+    position: fixed; z-index: 90; left: 50%; top: 4.6rem;
+    transform: translateX(-50%) translateY(-10px);
+    width: min(92vw, 420px);
+    background: #3f1218; color: #fff; border-radius: 1rem;
+    padding: .85rem 1rem; font-weight: 700; line-height: 1.45;
+    box-shadow: 0 12px 30px rgba(63,18,24,.28);
+    opacity: 0; pointer-events: none; transition: .25s ease;
+  }
+  #toast.is-on { opacity: 1; transform: translateX(-50%) translateY(0); }
+  .field-input[readonly] {
+    background: #fbf6f1; border-color: #f0e2d6; color: #3a241e;
+  }
+  .field-input:not([readonly]) {
+    background: #fff; border-color: #e86a17;
+    box-shadow: 0 0 0 3px rgba(232,106,23,.16);
+  }
+  .is-changed { box-shadow: inset 4px 0 0 #c2410c; }
+  .tab-btn { color: #8d7368; }
+  .tab-btn.is-active { color: #7c2432; }
+  .tab-btn.is-active .tab-ico { background: #7c2432; color: #fff; }
+  .action-btn:disabled { opacity: .38; pointer-events: none; }
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+  .no-scrollbar { scrollbar-width: none; }
+  #leaflet-map { height: 440px; width: 100%; background: #efe2d6; }
+  .leaflet-container img, .leaflet-container canvas { max-width: none !important; }
+  .leaflet-pane, .leaflet-map-pane { z-index: 1 !important; }
+  .leaflet-tile-pane { z-index: 1 !important; }
+  .leaflet-overlay-pane { z-index: 2 !important; }
+  .leaflet-shadow-pane { z-index: 3 !important; }
+  .leaflet-marker-pane { z-index: 4 !important; }
+  .leaflet-tooltip-pane { z-index: 5 !important; }
+  .leaflet-popup-pane { z-index: 6 !important; }
+  .leaflet-top, .leaflet-bottom, .leaflet-control { z-index: 7 !important; }
+  .leaflet-popup-content-wrapper { border-radius: .9rem; }
+  .leaflet-popup-content { margin: 10px 12px; font-family: 'Zen Maru Gothic', sans-serif; }
+  .bar-grow { transform-origin: left center; animation: grow .7s ease; }
+  @keyframes grow { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+  .pin {
+    width: 34px; height: 34px; border-radius: 999px; background: #c2410c; color: #fff;
+    display: flex; align-items: center; justify-content: center;
+    border: 2px solid #fff; box-shadow: 0 3px 8px rgba(0,0,0,.28); font-size: 14px;
+  }
+  .here-pin {
+    width: 18px; height: 18px; border-radius: 999px; background: #2563eb;
+    border: 3px solid #fff; box-shadow: 0 0 0 8px rgba(37,99,235,.25);
+  }
+</style>
+</head>
+<body class="min-h-screen flex justify-center items-start">
+
+<div id="toast" role="status"></div>
+
+<div class="w-full max-w-md bg-[#fffaf6] min-h-screen shadow-2xl relative pb-24">
+
+  <!-- ===================== 1. お客さま ===================== -->
+  <section id="screen-home" class="screen is-active">
+    <header class="sticky top-0 z-40 h-16 bg-gradient-to-r from-wine-800 via-[#8a3030] to-[#c45c2a] text-white px-3 flex items-center justify-between shadow-md">
+      <div class="flex items-center gap-2 min-w-0">
+        <div class="w-10 h-10 rounded-full bg-gradient-to-tr from-orange-500 to-amber-300 text-wine-900 flex items-center justify-center shrink-0 shadow">
+          <i class="fa-solid fa-beer-mug-empty"></i>
+        </div>
+        <h1 class="font-black text-[15px] leading-tight tracking-tight">本郷通り<br>ちょい飲みマップ</h1>
+      </div>
+      <div class="flex items-center gap-1 shrink-0">
+        <button type="button" onclick="openAuthModal('login')" class="text-sm font-bold bg-white/15 border border-white/25 px-2.5 py-2 rounded-xl">ログイン</button>
+        <button type="button" onclick="openAuthModal('signup')" class="text-sm font-bold bg-amber-400 text-wine-900 px-2.5 py-2 rounded-xl">登録</button>
+      </div>
+    </header>
+
+    <section class="relative overflow-hidden text-white">
+      <img src="https://images.unsplash.com/photo-1514933651103-005eec06c04b?auto=format&fit=crop&w=900&q=80" alt="" class="absolute inset-0 w-full h-full object-cover">
+      <div class="relative px-5 py-6 bg-gradient-to-b from-wine-900/75 via-wine-900/82 to-wine-900">
+        <p class="inline-flex items-center gap-1.5 bg-orange-500/25 border border-orange-300/40 text-amber-200 text-sm font-bold px-3 py-1 rounded-full">
+          <i class="fa-solid fa-fire"></i> スタンプラリー開催中
+        </p>
+        <h2 class="mt-3 text-[1.65rem] font-black leading-snug">
+          地域の隠れた名店を制覇してお得に呑み歩こう
+        </h2>
+        <p class="mt-2 text-base text-amber-50/90 leading-relaxed">1,000円せんべろセットで、本郷通りを気軽にハシゴ。</p>
+      </div>
+    </section>
+
+    <div class="px-4 pt-4">
+      <button type="button" onclick="openStampCardModal()" class="w-full bg-wine-800 text-white rounded-2xl p-4 flex items-center justify-between shadow-lg text-left">
+        <div class="flex items-center gap-3">
+          <div class="w-12 h-12 rounded-full bg-orange-500/20 border border-orange-300/40 flex items-center justify-center text-amber-300 text-xl">
+            <i class="fa-solid fa-stamp"></i>
+          </div>
+          <div>
+            <p class="text-sm text-amber-200 font-bold">ちょい飲みスタンプ</p>
+            <p id="stamp-progress-text" class="text-lg font-black">1 / 4 店舗</p>
+          </div>
+        </div>
+        <span class="text-sm font-bold bg-amber-400 text-wine-900 px-3 py-2 rounded-xl">スタンプ帳</span>
+      </button>
+    </div>
+
+    <div class="sticky top-16 z-30 px-4 py-3 bg-[#fffaf6]/95 backdrop-blur">
+      <div class="grid grid-cols-2 gap-2 p-1.5 bg-orange-100 rounded-2xl">
+        <button type="button" id="tab-btn-list" onclick="switchHomeTab('list')" class="flex items-center justify-center gap-1.5 py-3 rounded-xl font-black text-sm bg-white text-wine-700 shadow-sm">
+          <i class="fa-solid fa-list-ul"></i> 一覧から探す
+        </button>
+        <button type="button" id="tab-btn-map" onclick="switchHomeTab('map')" class="flex items-center justify-center gap-1.5 py-3 rounded-xl font-black text-sm text-wine-800">
+          <i class="fa-solid fa-map-location-dot"></i> 現在地マップで探す
+        </button>
+      </div>
+    </div>
+
+    <div id="view-list" class="px-4 pb-6 space-y-4">
+      <div class="flex items-center justify-between gap-2">
+        <p id="shop-count-label" class="text-base font-bold text-wine-800">参加店舗 4件</p>
+        <label class="flex items-center gap-2 bg-white border border-orange-200 rounded-xl px-3 py-2 shadow-sm">
+          <i class="fa-solid fa-arrow-down-wide-short text-orange-600"></i>
+          <select id="sort-select" onchange="handleSortChange()" class="bg-transparent font-bold text-base text-wine-900 outline-none">
+            <option value="asc">昇順（五十音）</option>
+            <option value="rating">評価順</option>
+            <option value="near">現在地から近い順</option>
+          </select>
+        </label>
+      </div>
+      <div id="shop-cards-container" class="space-y-4"></div>
+    </div>
+
+    <div id="view-map" class="px-4 pb-6 space-y-3 hidden">
+      <div class="bg-white border border-orange-100 rounded-2xl p-4 shadow-sm">
+        <p class="text-base font-black text-orange-700 flex items-center gap-2">
+          <i class="fa-solid fa-location-crosshairs"></i> 現在地：本郷通商店街
+        </p>
+        <p class="text-sm text-stone-600 mt-1">青い点が今いる場所。ピンをタップすると店の詳細へ進めます。</p>
+      </div>
+      <div class="rounded-2xl overflow-hidden border border-orange-100 shadow-md">
+        <div id="leaflet-map"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== 店舗詳細 ===================== -->
+  <section id="screen-detail" class="screen">
+    <header class="sticky top-0 z-40 h-16 bg-wine-800/95 backdrop-blur text-white px-3 flex items-center justify-between">
+      <button type="button" onclick="showScreen('home')" class="text-sm font-bold bg-white/10 border border-white/20 px-3 py-2 rounded-xl">
+        <i class="fa-solid fa-arrow-left"></i> 戻る
+      </button>
+      <p id="detail-header-genre" class="text-sm font-bold text-amber-200 truncate px-2">ジャンル</p>
+      <button type="button" onclick="openAdminEditorForCurrent()" class="text-sm font-black bg-amber-400 text-wine-900 px-3 py-2 rounded-xl">
+        <i class="fa-solid fa-pen"></i> 編集
+      </button>
+    </header>
+    <div class="relative h-64 bg-wine-900">
+      <img id="detail-main-img" alt="" class="w-full h-full object-cover">
+      <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent"></div>
+      <div class="absolute bottom-4 left-4 right-4 text-white">
+        <span id="detail-badge-genre" class="inline-block bg-orange-600 text-sm font-bold px-3 py-1 rounded-full">居酒屋</span>
+        <h2 id="detail-title" class="text-3xl font-black leading-tight mt-2">店舗名</h2>
+        <p id="detail-rating" class="text-amber-300 text-lg font-black mt-1"></p>
+        <p id="detail-address-sub" class="text-sm text-orange-50 mt-1"></p>
+      </div>
+    </div>
+    <div class="px-4 py-5 space-y-6">
+      <section>
+        <h3 class="text-lg font-black border-l-4 border-orange-600 pl-3">お店のご紹介</h3>
+        <p id="detail-desc" class="mt-2 text-base leading-relaxed bg-orange-50 border border-orange-100 rounded-2xl p-4"></p>
+      </section>
+      <section>
+        <h3 class="text-lg font-black border-l-4 border-orange-600 pl-3 mb-2">お店の雰囲気</h3>
+        <div class="grid grid-cols-3 gap-2">
+          <img id="detail-gallery-1" alt="" class="aspect-square object-cover rounded-xl">
+          <img id="detail-gallery-2" alt="" class="aspect-square object-cover rounded-xl">
+          <img id="detail-gallery-3" alt="" class="aspect-square object-cover rounded-xl">
+        </div>
+      </section>
+      <section class="bg-white border border-orange-100 rounded-2xl p-4 space-y-3 shadow-sm">
+        <p class="text-sm font-bold text-stone-500">店舗住所</p>
+        <p id="detail-full-address" class="text-base font-bold"></p>
+        <a id="detail-googlemap-link" href="#" target="_blank" rel="noopener" class="flex items-center justify-center gap-2 w-full bg-emerald-700 text-white font-black text-base py-3.5 rounded-xl">
+          <i class="fa-solid fa-map-location-dot"></i> Googleマップで開く
+        </a>
+      </section>
+      <section>
+        <h3 class="text-lg font-black border-l-4 border-orange-600 pl-3 mb-2">今月のキャンペーン</h3>
+        <div id="detail-campaigns-container" class="space-y-3"></div>
+      </section>
+      <section class="bg-gradient-to-br from-wine-800 to-wine-900 text-white rounded-3xl p-5 shadow-xl">
+        <div class="flex items-center gap-3">
+          <div class="w-11 h-11 rounded-full bg-orange-500 flex items-center justify-center text-lg"><i class="fa-solid fa-stamp"></i></div>
+          <div>
+            <h3 class="font-black text-lg text-amber-200">ちょい飲みスタンプラリー</h3>
+            <p class="text-sm text-orange-50">対象セットの注文で1店1スタンプ</p>
+          </div>
+        </div>
+        <div class="mt-4 bg-white/10 rounded-2xl p-4">
+          <p class="text-sm font-bold text-amber-300">1,000円せんべろセット</p>
+          <p id="detail-senbero-title" class="text-xl font-black mt-1"></p>
+          <p id="detail-senbero-desc" class="text-base text-orange-50 mt-1 leading-relaxed"></p>
+        </div>
+        <button type="button" id="btn-get-stamp" onclick="simulateGetStamp()" class="mt-4 w-full bg-gradient-to-r from-orange-500 to-amber-400 text-wine-900 font-black text-base py-4 rounded-2xl">
+          <i class="fa-solid fa-qrcode"></i> <span id="stamp-button-text">このセットを注文してスタンプGET</span>
+        </button>
+      </section>
+    </div>
+  </section>
+
+  <!-- ===================== 2. 店舗編集 ===================== -->
+  <section id="screen-edit" class="screen">
+    <header class="sticky top-0 z-40 h-16 bg-gradient-to-r from-amber-500 to-orange-600 text-wine-900 px-4 flex items-center gap-2 shadow">
+      <i class="fa-solid fa-screwdriver-wrench text-xl"></i>
+      <div>
+        <p class="text-[11px] font-bold leading-none">店舗管理者用</p>
+        <h1 class="font-black text-lg leading-tight">店舗情報の編集</h1>
+      </div>
+    </header>
+
+    <div id="draft-banner" class="sticky top-16 z-30 bg-amber-100 border-b border-amber-300 px-4 py-3 gap-3 items-start">
+      <i class="fa-solid fa-triangle-exclamation text-orange-700 text-xl mt-0.5"></i>
+      <div>
+        <p class="font-black text-base text-wine-800">未公開の下書き変更があります</p>
+        <p class="text-sm text-wine-700 leading-snug">お客さま画面には、まだ反映されていません。</p>
+      </div>
+    </div>
+
+    <div class="px-4 py-4 space-y-4">
+      <label class="block bg-amber-50 border border-amber-200 rounded-2xl p-4">
+        <span class="text-sm font-black text-wine-800 flex items-center gap-2"><i class="fa-solid fa-store"></i> 編集する店舗</span>
+        <select id="edit-shop-selector" onchange="switchEditShopTarget()" class="mt-2 w-full bg-white border border-amber-300 rounded-xl p-3 text-base font-bold outline-none"></select>
+      </label>
+
+      <div class="grid grid-cols-2 gap-2">
+        <button type="button" id="btn-save-draft" onclick="saveDraft()" class="action-btn bg-wine-800 text-white font-black text-base py-3.5 rounded-2xl">下書き保存</button>
+        <button type="button" id="btn-discard" onclick="discardDraft()" class="action-btn bg-white border-2 border-stone-300 text-stone-700 font-black text-base py-3.5 rounded-2xl">編集を破棄</button>
+      </div>
+      <button type="button" onclick="openPreview()" class="w-full bg-gradient-to-r from-orange-600 to-amber-500 text-white font-black text-lg py-4 rounded-2xl shadow-lg">
+        <i class="fa-solid fa-eye"></i> 変更内容をプレビュー確認
+      </button>
+      <p class="text-sm text-stone-600 leading-relaxed bg-orange-50 border border-orange-100 rounded-2xl p-3">
+        各項目の「編集する」を押すと、その欄だけ入力できます。公開はプレビューのあとです。
+      </p>
+
+      <div id="edit-fields" class="space-y-3"></div>
+    </div>
+  </section>
+
+  <!-- ===================== 3. 分析 ===================== -->
+  <section id="screen-analytics" class="screen">
+    <header class="sticky top-0 z-40 h-16 bg-gradient-to-r from-wine-800 to-[#a33b32] text-white px-4 flex items-center gap-2 shadow">
+      <i class="fa-solid fa-chart-column text-xl text-amber-300"></i>
+      <div>
+        <p class="text-[11px] font-bold text-amber-200 leading-none">店舗管理者用</p>
+        <h1 class="font-black text-lg leading-tight">今月の来店分析</h1>
+      </div>
+    </header>
+    <div class="px-4 py-4 space-y-4">
+      <label class="block">
+        <span class="text-sm font-black text-wine-800">分析する店舗</span>
+        <select id="analytics-shop" onchange="onAnalyticsShopChange()" class="mt-1 w-full bg-white border border-orange-200 rounded-xl p-3 text-base font-bold outline-none"></select>
+      </label>
+      <div id="analytics-body"></div>
+      <p class="text-xs text-stone-500 text-center pb-2">閲覧数・評価・回遊の数字は、プレゼン用のサンプルです。</p>
+    </div>
+  </section>
+
+  <!-- タブ -->
+  <nav class="fixed bottom-0 left-0 right-0 z-40 flex justify-center pointer-events-none">
+    <div class="pointer-events-auto w-full max-w-md bg-white border-t border-orange-100 grid grid-cols-3 shadow-[0_-8px_24px_rgba(94,28,36,.08)]" style="padding-bottom: env(safe-area-inset-bottom)">
+      <button type="button" data-tab="home" onclick="showScreen('home')" class="tab-btn is-active py-2.5 flex flex-col items-center gap-1 font-black text-sm">
+        <span class="tab-ico w-9 h-9 rounded-full bg-orange-50 flex items-center justify-center text-base"><i class="fa-solid fa-house"></i></span>
+        お客さま
+      </button>
+      <button type="button" data-tab="edit" onclick="showScreen('edit')" class="tab-btn py-2.5 flex flex-col items-center gap-1 font-black text-sm">
+        <span class="tab-ico w-9 h-9 rounded-full bg-orange-50 flex items-center justify-center text-base"><i class="fa-solid fa-pen-to-square"></i></span>
+        店舗編集
+      </button>
+      <button type="button" data-tab="analytics" onclick="showScreen('analytics')" class="tab-btn py-2.5 flex flex-col items-center gap-1 font-black text-sm">
+        <span class="tab-ico w-9 h-9 rounded-full bg-orange-50 flex items-center justify-center text-base"><i class="fa-solid fa-chart-line"></i></span>
+        分析
+      </button>
+    </div>
+  </nav>
+</div>
+
+<!-- ログイン -->
+<div id="auth-modal" class="modal">
+  <div class="absolute inset-0 bg-black/60" onclick="closeAuthModal()"></div>
+  <div class="relative bg-white w-full max-w-md rounded-t-3xl p-6 pb-8 space-y-3">
+    <h3 id="auth-title" class="text-2xl font-black text-center">ログイン</h3>
+    <p id="auth-desc" class="text-base text-stone-600 text-center">デモ用の画面です。送信してもアカウントは作られません。</p>
+    <label class="block text-sm font-bold">メールアドレス
+      <input type="email" placeholder="example@hongo.jp" class="mt-1 w-full border border-orange-200 rounded-xl p-3 text-base outline-none">
+    </label>
+    <label class="block text-sm font-bold">パスワード
+      <input type="password" placeholder="••••••••" class="mt-1 w-full border border-orange-200 rounded-xl p-3 text-base outline-none">
+    </label>
+    <button type="button" onclick="closeAuthModal()" class="w-full bg-orange-600 text-white font-black text-base py-3.5 rounded-2xl">送信する（デモ）</button>
+    <button type="button" onclick="closeAuthModal()" class="w-full bg-stone-100 font-bold text-base py-3 rounded-2xl">閉じる</button>
+  </div>
+</div>
+
+<!-- スタンプ帳 -->
+<div id="stamp-modal" class="modal">
+  <div class="absolute inset-0 bg-black/60" onclick="closeStampCardModal()"></div>
+  <div class="relative bg-white w-full max-w-md rounded-t-3xl p-5 pb-8 max-h-[88vh] overflow-y-auto">
+    <div class="flex items-center justify-between">
+      <h3 class="text-xl font-black">ちょい飲みスタンプ帳</h3>
+      <button type="button" onclick="closeStampCardModal()" class="w-10 h-10 text-xl"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <p class="text-base text-stone-600 mt-2">4店ぜんぶ集めると、共通500円割引券です。</p>
+    <div id="stamp-grid-container" class="grid grid-cols-2 gap-3 mt-4"></div>
+  </div>
+</div>
+
+<!-- プレビュー -->
+<div id="preview-modal" class="modal">
+  <div class="absolute inset-0 bg-black/60" onclick="closePreview()"></div>
+  <div class="relative bg-[#fffaf6] w-full max-w-md rounded-t-3xl max-h-[92vh] overflow-y-auto">
+    <div class="sticky top-0 bg-[#fffaf6] px-5 pt-4 pb-3 flex items-center justify-between border-b border-orange-100">
+      <h3 class="text-xl font-black">公開前のプレビュー</h3>
+      <button type="button" onclick="closePreview()" class="w-10 h-10 text-xl"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div id="preview-body" class="px-5 py-4"></div>
+    <div class="sticky bottom-0 bg-[#fffaf6] px-5 pt-2 pb-6 border-t border-orange-100">
+      <button type="button" id="preview-publish" onclick="publishDraft()" class="action-btn w-full bg-wine-800 text-white font-black text-lg py-4 rounded-2xl">
+        この内容で公開(更新)
+      </button>
+    </div>
+  </div>
+</div>
+
+<script>
+const HERE = { lat: 43.0454, lng: 141.4000 };
+
+const shopsData = {
+  marugo: {
+    id: 'marugo',
+    name: 'よりみち酒場 まるご',
+    genre: 'ダーツ＆立ち寄り酒場',
+    catch: '仕事帰りにサクッと1杯。笑顔とダーツが集まる隠れ家',
+    address: '札幌市白石区本郷通7丁目北1-23 シェリオ本郷通1F',
+    rating: 4.8, reviews: 24,
+    desc: '本郷通り商店街の真ん中にある、アットホームな立ち寄り酒場です。お一人様でも楽しめるダーツと、日替わりの手作りおつまみが自慢。仕事帰りの一杯に、ふらっと寄ってください。',
+    images: [
+      'https://images.unsplash.com/photo-1514933651103-005eec06c04b?auto=format&fit=crop&w=800&q=80',
+      'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?auto=format&fit=crop&w=600&q=80',
+      'https://images.unsplash.com/photo-1544145945-f90425340c7e?auto=format&fit=crop&w=600&q=80'
+    ],
+    mapUrl: 'https://maps.google.com/?q=札幌市白石区本郷通7丁目北1-23',
+    instagramUrl: '#',
+    lat: 43.0452, lng: 141.3985,
+    senberoTitle: 'まるごのせんべろセット',
+    senberoDesc: 'お好きなドリンク1杯 ＋ 本日の特製手作りおつまみ2品',
+    campaigns: [
+      { title: '【初回限定】生ビール1杯サービス', desc: 'アプリ画面の提示で、最初の1杯を生ビールに無料サイズアップ。', badge: '人気No.1' },
+      { title: 'ダーツ1ゲーム無料', desc: 'せんべろセットご注文で、カウントアップ1ゲーム無料。', badge: 'お得' },
+      { title: '雨の日は小鉢もう1品', desc: '雨の日のご来店で、特製小鉢を1品サービス。', badge: '雨の日' }
+    ],
+    hasStamp: true
+  },
+  elverano: {
+    id: 'elverano',
+    name: 'el verano',
+    genre: '手作りタコス＆メキシカン',
+    catch: '自家製タコスとテキーラハイボールで乾杯',
+    address: '札幌市白石区本郷通8丁目南2-1',
+    rating: 4.7, reviews: 18,
+    desc: 'スパイスの香る自家製タコスと、キンキンのメキシカンカクテルが楽しめる元気なお店。陽気な音楽とともに、短い時間でも満足できるちょい飲みをどうぞ。',
+    images: [
+      'https://images.unsplash.com/photo-1565299585323-38d6b0865b47?auto=format&fit=crop&w=800&q=80',
+      'https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=600&q=80',
+      'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=600&q=80'
+    ],
+    mapUrl: 'https://maps.app.goo.gl/SWdc8o8g42eWU2to8',
+    instagramUrl: 'https://www.instagram.com/el_verano1122',
+    lat: 43.0445, lng: 141.4001,
+    senberoTitle: 'メキシカンちょい飲みセット',
+    senberoDesc: '名物自家製タコス1P ＋ テキーラハイボールまたはソフトドリンク',
+    campaigns: [
+      { title: 'サルサチップス100円引き', desc: 'せんべろセットご注文で、自家製サルサチップスが100円引き。', badge: '名物' },
+      { title: '18時までビール100円引き', desc: '18時までのご来店で、メキシカンビールが100円引き。', badge: 'タイムセール' },
+      { title: 'インスタフォローでナチョス増量', desc: '公式Instagramのフォロー画面を提示で適用。', badge: 'SNS' }
+    ],
+    hasStamp: false
+  },
+  fivestar: {
+    id: 'fivestar',
+    name: 'バルファイブスター',
+    genre: 'カジュアル欧風バル',
+    catch: 'グラスワインとアヒージョが自慢の近所バル',
+    address: '札幌市白石区本郷通8丁目北7-1',
+    rating: 4.6, reviews: 31,
+    desc: 'ワイン好きが集まるカジュアルな欧風バル。手頃なグラスワインと、バゲットによく合うアヒージョで、少しリッチな1,000円の夜を。',
+    images: [
+      'https://images.unsplash.com/photo-1510812431401-41d2bd2722f3?auto=format&fit=crop&w=800&q=80',
+      'https://images.unsplash.com/photo-1541544741938-0af808871cc0?auto=format&fit=crop&w=600&q=80',
+      'https://images.unsplash.com/photo-1559339352-11d035aa65de?auto=format&fit=crop&w=600&q=80'
+    ],
+    mapUrl: 'https://maps.app.goo.gl/TR2zUWQMFobMXkXd8',
+    instagramUrl: 'https://www.instagram.com/marcyclimax',
+    lat: 43.0458, lng: 141.4008,
+    senberoTitle: 'バルの晩酌セット',
+    senberoDesc: '本日のグラスワイン（赤・白・泡）＋ 前菜3種の盛り合わせ',
+    campaigns: [
+      { title: 'ボトルワイン10%OFF', desc: 'グループ来店で、ボトルワインを10%引き。', badge: 'ワイン' },
+      { title: 'バゲットおかわり無料', desc: 'アヒージョご注文で、焼きたてバゲットを1回おかわり。', badge: '大好評' },
+      { title: 'おすすめチーズをサービス', desc: 'ちょい飲みセットに、本日のチーズを1種添えてご提供。', badge: '今月' }
+    ],
+    hasStamp: false
+  },
+  rooster: {
+    id: 'rooster',
+    name: 'BAR☆ルースター',
+    genre: 'カフェ＆ショットバー',
+    catch: 'バー初心者歓迎。音楽と本格カクテル',
+    address: '札幌市白石区本郷通8丁目北7-1',
+    rating: 4.9, reviews: 15,
+    desc: 'バーが初めての方や、お一人でも入りやすいオープンな雰囲気です。マスター特製のカクテルで、一日の終わりをゆっくり整えてください。',
+    images: [
+      'https://images.unsplash.com/photo-1572116469696-31de0f17cc34?auto=format&fit=crop&w=800&q=80',
+      'https://images.unsplash.com/photo-1514362545857-3bc16c4c7d1b?auto=format&fit=crop&w=600&q=80',
+      'https://images.unsplash.com/photo-1527281400683-1aae777175f8?auto=format&fit=crop&w=600&q=80'
+    ],
+    mapUrl: 'https://maps.app.goo.gl/rSukQ78BK5nXqGTy7',
+    instagramUrl: 'https://www.instagram.com/bar.loostar',
+    lat: 43.0461, lng: 141.4012,
+    senberoTitle: 'ルースターナイトセット',
+    senberoDesc: 'マスターおまかせカクテル1杯 ＋ スナック＆ミックスナッツ',
+    campaigns: [
+      { title: 'ノンアルカクテル充実', desc: 'お酒を飲まない方も楽しめるモクテルを各種ご用意。', badge: '安心' },
+      { title: '女性2名以上でチャージ半額', desc: '女性グループのご来店で、テーブルチャージ半額。', badge: '女子会' },
+      { title: 'リクエスト曲を流します', desc: 'お好みのジャズや洋楽を、店内BGMでおかけします。', badge: '音楽' }
+    ],
+    hasStamp: false
+  }
+};
+
+const analyticsData = {
+  marugo: {
+    pv: 2486, delta: 18,
+    week: [42, 55, 48, 70, 66, 81, 96],
+    ratings: { 5: 14, 4: 7, 3: 2, 2: 1, 1: 0 },
+    stamps: 186,
+    visits: [
+      ['10/28 19:12', 'せんべろセットでスタンプ'],
+      ['10/28 18:41', 'せんべろセットでスタンプ'],
+      ['10/27 21:05', 'せんべろセットでスタンプ'],
+      ['10/27 20:16', '雨の日サービスと一緒に配布'],
+      ['10/26 19:48', 'せんべろセットでスタンプ'],
+      ['10/25 18:02', '初回来店・生ビールサービス']
+    ],
+    inflow: [
+      ['elverano', 150],
+      ['fivestar', 120],
+      ['rooster', 58]
+    ],
+    direct: 210
+  },
+  elverano: {
+    pv: 1712, delta: 9,
+    week: [30, 28, 44, 41, 52, 49, 61],
+    ratings: { 5: 10, 4: 5, 3: 2, 2: 1, 1: 0 },
+    stamps: 121,
+    visits: [
+      ['10/28 20:02', 'タコスセットでスタンプ'],
+      ['10/28 18:20', 'せんべろセットでスタンプ'],
+      ['10/27 19:44', 'せんべろセットでスタンプ'],
+      ['10/26 21:11', 'せんべろセットでスタンプ']
+    ],
+    inflow: [
+      ['marugo', 98],
+      ['fivestar', 74],
+      ['rooster', 36]
+    ],
+    direct: 164
+  },
+  fivestar: {
+    pv: 1394, delta: 6,
+    week: [22, 31, 27, 36, 40, 33, 48],
+    ratings: { 5: 16, 4: 10, 3: 3, 2: 1, 1: 1 },
+    stamps: 97,
+    visits: [
+      ['10/28 19:33', 'ワインセットでスタンプ'],
+      ['10/27 20:40', 'せんべろセットでスタンプ'],
+      ['10/26 18:55', 'せんべろセットでスタンプ'],
+      ['10/25 21:18', 'グループ来店・ボトル割と同時']
+    ],
+    inflow: [
+      ['marugo', 88],
+      ['elverano', 71],
+      ['rooster', 29]
+    ],
+    direct: 140
+  },
+  rooster: {
+    pv: 986, delta: 12,
+    week: [18, 16, 24, 21, 29, 34, 38],
+    ratings: { 5: 11, 4: 3, 3: 1, 2: 0, 1: 0 },
+    stamps: 74,
+    visits: [
+      ['10/28 21:20', 'カクテルセットでスタンプ'],
+      ['10/27 22:01', 'せんべろセットでスタンプ'],
+      ['10/26 20:36', 'せんべろセットでスタンプ'],
+      ['10/24 21:48', 'ノンアル注文でもスタンプ']
+    ],
+    inflow: [
+      ['fivestar', 54],
+      ['marugo', 41],
+      ['elverano', 27]
+    ],
+    direct: 92
+  }
+};
+
+const publishedSnapshot = {};
+Object.keys(shopsData).forEach(function (k) {
+  publishedSnapshot[k] = clone(shopsData[k]);
+});
+
+const draftShops = {};
+draftShops.marugo = clone(shopsData.marugo);
+draftShops.marugo.campaigns[0].title = '【下書き】アプリ提示で生ビール1杯無料';
+draftShops.marugo.senberoDesc = 'お好きなドリンク1杯 ＋ 本日の特製手作りおつまみ2品 ＋ 枝豆おかわり自由';
+
+let currentDetailShopId = 'marugo';
+let currentEditShopId = 'marugo';
+let currentAnalyticsShopId = 'marugo';
+let currentSort = 'asc';
+let editFormLoadedFor = null;
+let mapInitialized = false;
+let leafletMap = null;
+let markerLayer = null;
+let toastTimer = null;
+
+const SECTIONS = [
+  { key: 'name', label: '店舗名', inputs: [{ id: 'input-name', prop: 'name' }] },
+  { key: 'genre', label: 'ジャンル', inputs: [{ id: 'input-genre', prop: 'genre' }] },
+  { key: 'catch', label: 'キャッチコピー', inputs: [{ id: 'input-catch', prop: 'catch' }] },
+  { key: 'desc', label: '紹介文', inputs: [{ id: 'input-desc', prop: 'desc', area: true }] },
+  { key: 'address', label: '住所', inputs: [{ id: 'input-address', prop: 'address', area: true }] },
+  { key: 'map', label: 'GoogleマップURL', inputs: [{ id: 'input-mapurl', prop: 'mapUrl' }] },
+  { key: 'photos', label: '写真（3枚）', photos: true },
+  { key: 'cp1', label: 'キャンペーン①', campaign: 0 },
+  { key: 'cp2', label: 'キャンペーン②', campaign: 1 },
+  { key: 'cp3', label: 'キャンペーン③', campaign: 2 },
+  { key: 'senbero', label: '1,000円せんべろセット', senbero: true }
+];
+
+function clone(obj) { return JSON.parse(JSON.stringify(obj)); }
+
+function esc(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+  });
+}
+
+function toast(message) {
+  const el = document.getElementById('toast');
+  el.textContent = message;
+  el.classList.add('is-on');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(function () { el.classList.remove('is-on'); }, 2800);
+}
+
+function distanceMeters(shop) {
+  const dy = (shop.lat - HERE.lat) * 110940;
+  const dx = (shop.lng - HERE.lng) * 111320 * Math.cos(HERE.lat * Math.PI / 180);
+  return Math.round(Math.hypot(dx, dy));
+}
+
+function starIcons(rating) {
+  let html = '';
+  for (let i = 1; i <= 5; i++) {
+    if (rating >= i) html += '<i class="fa-solid fa-star"></i>';
+    else if (rating >= i - 0.5) html += '<i class="fa-solid fa-star-half-stroke"></i>';
+    else html += '<i class="fa-regular fa-star"></i>';
+  }
+  return html;
+}
+
+function showScreen(name) {
+  document.querySelectorAll('.screen').forEach(function (el) {
+    el.classList.toggle('is-active', el.id === 'screen-' + name);
+  });
+  const tabName = name === 'detail' ? 'home' : name;
+  document.querySelectorAll('[data-tab]').forEach(function (btn) {
+    btn.classList.toggle('is-active', btn.dataset.tab === tabName);
+  });
+  window.scrollTo(0, 0);
+  if (name === 'edit' && editFormLoadedFor !== currentEditShopId) loadEditForm(currentEditShopId);
+  if (name === 'analytics') renderAnalytics();
+  if (name === 'detail') renderShopDetail(currentDetailShopId);
+}
+
+function openShopDetail(shopId) {
+  currentDetailShopId = shopId;
+  showScreen('detail');
+}
+
+function openAdminEditorForCurrent() {
+  currentEditShopId = currentDetailShopId;
+  editFormLoadedFor = null;
+  showScreen('edit');
+}
+
+function switchHomeTab(type) {
+  const listBtn = document.getElementById('tab-btn-list');
+  const mapBtn = document.getElementById('tab-btn-map');
+  const viewList = document.getElementById('view-list');
+  const viewMap = document.getElementById('view-map');
+  const on = 'flex items-center justify-center gap-1.5 py-3 rounded-xl font-black text-sm bg-white text-wine-700 shadow-sm';
+  const off = 'flex items-center justify-center gap-1.5 py-3 rounded-xl font-black text-sm text-wine-800';
+  const showList = type === 'list';
+  listBtn.className = showList ? on : off;
+  mapBtn.className = showList ? off : on;
+  viewList.classList.toggle('hidden', !showList);
+  viewMap.classList.toggle('hidden', showList);
+  if (!showList) {
+    if (!mapInitialized) {
+      mapInitialized = true;
+      setTimeout(initLeafletMap, 80);
+    } else if (leafletMap) {
+      leafletMap.invalidateSize();
+    }
+  }
+}
+
+function handleSortChange() {
+  currentSort = document.getElementById('sort-select').value;
+  renderHomeScreen(currentSort);
+}
+
+function sortedKeys(sortType) {
+  const keys = Object.keys(shopsData);
+  if (sortType === 'rating') keys.sort(function (a, b) { return shopsData[b].rating - shopsData[a].rating; });
+  else if (sortType === 'near') keys.sort(function (a, b) { return distanceMeters(shopsData[a]) - distanceMeters(shopsData[b]); });
+  else keys.sort(function (a, b) { return shopsData[a].name.localeCompare(shopsData[b].name, 'ja'); });
+  return keys;
+}
+
+function renderHomeScreen(sortType) {
+  currentSort = sortType || currentSort;
+  const container = document.getElementById('shop-cards-container');
+  const keys = sortedKeys(currentSort);
+  document.getElementById('shop-count-label').textContent = '参加店舗 ' + keys.length + '件';
+  container.innerHTML = keys.map(function (key) {
+    const shop = shopsData[key];
+    const sns = shop.instagramUrl && shop.instagramUrl !== '#'
+      ? '<a href="' + esc(shop.instagramUrl) + '" target="_blank" rel="noopener" class="text-pink-600 font-bold text-sm shrink-0"><i class="fa-brands fa-instagram"></i> SNS</a>'
+      : '';
+    return ''
+      + '<article class="bg-white rounded-3xl border border-orange-100 overflow-hidden shadow-sm">'
+      + '<div class="relative h-44 bg-orange-100">'
+      + '<img src="' + esc(shop.images[0]) + '" alt="" class="w-full h-full object-cover">'
+      + '<span class="absolute top-3 left-3 bg-wine-900/85 text-white text-sm font-bold px-3 py-1 rounded-full">' + esc(shop.genre) + '</span>'
+      + '<span class="absolute bottom-3 right-3 bg-white/95 text-amber-500 font-black text-base px-2.5 py-1 rounded-xl shadow">' + starIcons(shop.rating) + ' <span class="text-wine-900">' + shop.rating + '</span></span>'
+      + '</div>'
+      + '<div class="p-4 space-y-3">'
+      + '<div><h3 class="font-black text-2xl leading-tight">' + esc(shop.name) + '</h3>'
+      + '<p class="text-base font-bold text-orange-700 mt-1">' + esc(shop.catch) + '</p></div>'
+      + '<p class="text-base leading-relaxed text-stone-700">' + esc(shop.desc) + '</p>'
+      + '<div class="bg-orange-50 border border-orange-100 rounded-2xl p-3">'
+      + '<p class="text-sm font-black text-orange-700">1,000円せんべろセット</p>'
+      + '<p class="font-black text-lg mt-0.5">' + esc(shop.senberoTitle) + '</p>'
+      + '<p class="text-base text-stone-700 mt-0.5">' + esc(shop.senberoDesc) + '</p>'
+      + '</div>'
+      + '<div class="flex items-center justify-between gap-2 text-sm text-stone-600">'
+      + '<span><i class="fa-solid fa-location-dot text-orange-600"></i> 現在地から ' + distanceMeters(shop) + 'm</span>' + sns
+      + '</div>'
+      + '<button type="button" onclick="openShopDetail(\'' + key + '\')" class="w-full bg-orange-600 text-white font-black text-lg py-3.5 rounded-2xl">詳細を見る</button>'
+      + '</div></article>';
+  }).join('');
+}
+
+function initLeafletMap() {
+  if (typeof L === 'undefined') {
+    document.getElementById('leaflet-map').innerHTML = '<p class="p-6 text-center text-base">地図を読み込めませんでした。通信環境をご確認ください。</p>';
+    return;
+  }
+  leafletMap = L.map('leaflet-map', { zoomControl: true }).setView([HERE.lat, HERE.lng], 16);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OpenStreetMap' }).addTo(leafletMap);
+  L.circle([HERE.lat, HERE.lng], { color: '#ea580c', fillColor: '#f97316', fillOpacity: 0.12, radius: 250 }).addTo(leafletMap);
+  const here = L.marker([HERE.lat, HERE.lng], {
+    icon: L.divIcon({ className: '', html: '<div class="here-pin"></div>', iconSize: [18, 18], iconAnchor: [9, 9] }),
+    zIndexOffset: 400
+  }).addTo(leafletMap);
+  here.bindPopup('<b>いまここ</b><br>本郷通商店街');
+  renderMarkers();
+  setTimeout(function () { leafletMap.invalidateSize(); }, 200);
+}
+
+function renderMarkers() {
+  if (!leafletMap) return;
+  if (markerLayer) leafletMap.removeLayer(markerLayer);
+  markerLayer = L.layerGroup().addTo(leafletMap);
+  Object.keys(shopsData).forEach(function (key) {
+    const shop = shopsData[key];
+    const marker = L.marker([shop.lat, shop.lng], {
+      icon: L.divIcon({
+        className: '',
+        html: '<div class="pin"><i class="fa-solid fa-beer-mug-empty"></i></div>',
+        iconSize: [34, 34],
+        iconAnchor: [17, 17],
+        popupAnchor: [0, -16]
+      })
+    }).addTo(markerLayer);
+    marker.bindPopup(
+      '<b style="font-size:15px">' + esc(shop.name) + '</b><br><span style="color:#c2410c">' + esc(shop.genre) + '</span>'
+      + '<br><button type="button" onclick="openShopDetail(\'' + key + '\')" style="margin-top:8px;background:#c2410c;color:#fff;border:0;border-radius:10px;padding:8px 10px;font-weight:800;width:100%">詳細を見る</button>'
+    );
+  });
+}
+
+function renderShopDetail(shopId) {
+  const shop = shopsData[shopId];
+  if (!shop) return;
+  document.getElementById('detail-header-genre').textContent = shop.genre;
+  document.getElementById('detail-badge-genre').textContent = shop.genre;
+  document.getElementById('detail-title').textContent = shop.name;
+  document.getElementById('detail-rating').innerHTML = starIcons(shop.rating) + ' ' + shop.rating + '（' + shop.reviews + '件）';
+  document.getElementById('detail-address-sub').innerHTML = '<i class="fa-solid fa-location-dot"></i> ' + esc(shop.address);
+  document.getElementById('detail-desc').textContent = shop.desc;
+  document.getElementById('detail-full-address').textContent = shop.address;
+  document.getElementById('detail-googlemap-link').href = shop.mapUrl;
+  document.getElementById('detail-main-img').src = shop.images[0];
+  document.getElementById('detail-gallery-1').src = shop.images[0];
+  document.getElementById('detail-gallery-2').src = shop.images[1];
+  document.getElementById('detail-gallery-3').src = shop.images[2];
+  document.getElementById('detail-senbero-title').textContent = shop.senberoTitle;
+  document.getElementById('detail-senbero-desc').textContent = shop.senberoDesc;
+  const stampBtn = document.getElementById('btn-get-stamp');
+  const stampText = document.getElementById('stamp-button-text');
+  if (shop.hasStamp) {
+    stampText.textContent = 'この店舗のスタンプは獲得済み';
+    stampBtn.className = 'mt-4 w-full bg-white/15 text-amber-100 font-black text-base py-4 rounded-2xl';
+  } else {
+    stampText.textContent = 'このセットを注文してスタンプGET';
+    stampBtn.className = 'mt-4 w-full bg-gradient-to-r from-orange-500 to-amber-400 text-wine-900 font-black text-base py-4 rounded-2xl';
+  }
+  document.getElementById('detail-campaigns-container').innerHTML = shop.campaigns.map(function (cp) {
+    return '<article class="bg-white border border-orange-100 rounded-2xl p-4 shadow-sm">'
+      + '<span class="inline-block bg-amber-100 text-wine-800 text-sm font-black px-2.5 py-1 rounded-lg">' + esc(cp.badge) + '</span>'
+      + '<h4 class="font-black text-lg mt-2">' + esc(cp.title) + '</h4>'
+      + '<p class="text-base text-stone-600 mt-1 leading-relaxed">' + esc(cp.desc) + '</p></article>';
+  }).join('');
+}
+
+function simulateGetStamp() {
+  const shop = shopsData[currentDetailShopId];
+  if (!shop || shop.hasStamp) {
+    toast('この店舗のスタンプは、すでに獲得済みです');
+    return;
+  }
+  shop.hasStamp = true;
+  const stats = analyticsData[shop.id];
+  stats.stamps += 1;
+  const now = new Date();
+  const hh = String(now.getHours()).padStart(2, '0');
+  const mm = String(now.getMinutes()).padStart(2, '0');
+  stats.visits.unshift(['10/28 ' + hh + ':' + mm, 'たった今スタンプを配布']);
+  renderShopDetail(shop.id);
+  updateStampUI();
+  toast(shop.name + ' のスタンプを獲得しました');
+}
+
+function updateStampUI() {
+  const grid = document.getElementById('stamp-grid-container');
+  let count = 0;
+  grid.innerHTML = Object.keys(shopsData).map(function (key) {
+    const shop = shopsData[key];
+    if (shop.hasStamp) count += 1;
+    if (shop.hasStamp) {
+      return '<div class="bg-orange-50 border-2 border-orange-500 rounded-2xl p-3 text-center"><i class="fa-solid fa-circle-check text-3xl text-orange-600"></i><p class="font-black mt-1 leading-tight">' + esc(shop.name) + '</p><p class="text-sm font-bold text-orange-700">獲得済み</p></div>';
+    }
+    return '<div class="bg-stone-50 border-2 border-dashed border-stone-300 rounded-2xl p-3 text-center text-stone-400"><i class="fa-solid fa-stamp text-3xl"></i><p class="font-black mt-1 text-stone-700 leading-tight">' + esc(shop.name) + '</p><p class="text-sm">未獲得</p></div>';
+  }).join('');
+  document.getElementById('stamp-progress-text').textContent = count + ' / 4 店舗';
+}
+
+function syncShopSelects() {
+  ['edit-shop-selector', 'analytics-shop'].forEach(function (id) {
+    const sel = document.getElementById(id);
+    const current = sel.value;
+    sel.innerHTML = Object.keys(shopsData).map(function (k) {
+      return '<option value="' + k + '">' + esc(shopsData[k].name) + '</option>';
+    }).join('');
+    if (current && shopsData[current]) sel.value = current;
+  });
+  document.getElementById('edit-shop-selector').value = currentEditShopId;
+  document.getElementById('analytics-shop').value = currentAnalyticsShopId;
+}
+
+function fieldHtml(section) {
+  if (section.photos) {
+    return [1, 2, 3].map(function (n) {
+      const label = n === 1 ? 'メイン写真' : (n === 2 ? '料理・おつまみ' : '店内の雰囲気');
+      return '<label class="block mt-2 text-sm font-bold">' + label
+        + '<span class="flex gap-2 mt-1"><input id="input-img-' + n + '" readonly class="field-input w-full border rounded-xl p-3 text-sm">'
+        + '<button type="button" onclick="triggerSamplePhoto(' + n + ')" class="shrink-0 bg-orange-100 text-wine-800 font-black text-sm px-3 rounded-xl">サンプル</button></span></label>';
+    }).join('');
+  }
+  if (typeof section.campaign === 'number') {
+    const n = section.campaign + 1;
+    return ''
+      + '<input id="input-cp' + n + '-title" readonly placeholder="タイトル" class="field-input w-full border rounded-xl p-3 text-base mt-2">'
+      + '<input id="input-cp' + n + '-desc" readonly placeholder="説明" class="field-input w-full border rounded-xl p-3 text-base mt-2">'
+      + '<input id="input-cp' + n + '-badge" readonly placeholder="バッジ" class="field-input w-full border rounded-xl p-3 text-base mt-2">';
+  }
+  if (section.senbero) {
+    return ''
+      + '<p class="text-sm font-bold mt-2">セット名</p><input id="input-senbero-title" readonly class="field-input w-full border rounded-xl p-3 text-base">'
+      + '<p class="text-sm font-bold mt-2">セット内容</p><textarea id="input-senbero-desc" readonly rows="2" class="field-input w-full border rounded-xl p-3 text-base"></textarea>';
+  }
+  return section.inputs.map(function (input) {
+    if (input.area) return '<textarea id="' + input.id + '" readonly rows="3" class="field-input w-full border rounded-xl p-3 text-base mt-2 leading-relaxed"></textarea>';
+    return '<input id="' + input.id + '" readonly class="field-input w-full border rounded-xl p-3 text-base mt-2">';
+  }).join('');
+}
+
+function buildEditFields() {
+  document.getElementById('edit-fields').innerHTML = SECTIONS.map(function (section) {
+    return '<section id="block-' + section.key + '" class="bg-white border border-orange-100 rounded-2xl p-4 shadow-sm">'
+      + '<div class="flex items-center justify-between gap-2">'
+      + '<h3 class="font-black text-lg">' + section.label + ' <span id="changed-' + section.key + '" class="hidden text-sm bg-orange-600 text-white px-2 py-0.5 rounded-full align-middle">変更</span></h3>'
+      + '<button type="button" id="btn-lock-' + section.key + '" onclick="toggleSection(\'' + section.key + '\')" class="shrink-0 bg-orange-50 text-orange-700 border border-orange-200 font-black text-sm px-3 py-2 rounded-xl">編集する</button>'
+      + '</div>'
+      + fieldHtml(section)
+      + '</section>';
+  }).join('');
+}
+
+function sectionInputs(section) {
+  if (section.photos) return ['input-img-1', 'input-img-2', 'input-img-3'];
+  if (typeof section.campaign === 'number') {
+    const n = section.campaign + 1;
+    return ['input-cp' + n + '-title', 'input-cp' + n + '-desc', 'input-cp' + n + '-badge'];
+  }
+  if (section.senbero) return ['input-senbero-title', 'input-senbero-desc'];
+  return section.inputs.map(function (input) { return input.id; });
+}
+
+function setSectionLocked(key, locked) {
+  const section = SECTIONS.find(function (s) { return s.key === key; });
+  sectionInputs(section).forEach(function (id) {
+    document.getElementById(id).readOnly = locked;
+  });
+  const btn = document.getElementById('btn-lock-' + key);
+  btn.textContent = locked ? '編集する' : '入力中';
+  btn.className = locked
+    ? 'shrink-0 bg-orange-50 text-orange-700 border border-orange-200 font-black text-sm px-3 py-2 rounded-xl'
+    : 'shrink-0 bg-orange-600 text-white font-black text-sm px-3 py-2 rounded-xl';
+}
+
+function lockAll() {
+  SECTIONS.forEach(function (section) { setSectionLocked(section.key, true); });
+}
+
+function toggleSection(key) {
+  const section = SECTIONS.find(function (s) { return s.key === key; });
+  const first = document.getElementById(sectionInputs(section)[0]);
+  const willLock = !first.readOnly;
+  setSectionLocked(key, willLock);
+  if (!willLock) first.focus();
+}
+
+function val(id) { return document.getElementById(id).value; }
+
+function fillForm(shop) {
+  document.getElementById('input-name').value = shop.name;
+  document.getElementById('input-genre').value = shop.genre;
+  document.getElementById('input-catch').value = shop.catch;
+  document.getElementById('input-desc').value = shop.desc;
+  document.getElementById('input-address').value = shop.address;
+  document.getElementById('input-mapurl').value = shop.mapUrl;
+  document.getElementById('input-img-1').value = shop.images[0];
+  document.getElementById('input-img-2').value = shop.images[1];
+  document.getElementById('input-img-3').value = shop.images[2];
+  for (let i = 0; i < 3; i++) {
+    const n = i + 1;
+    const cp = shop.campaigns[i] || { title: '', desc: '', badge: '' };
+    document.getElementById('input-cp' + n + '-title').value = cp.title;
+    document.getElementById('input-cp' + n + '-desc').value = cp.desc;
+    document.getElementById('input-cp' + n + '-badge').value = cp.badge;
+  }
+  document.getElementById('input-senbero-title').value = shop.senberoTitle;
+  document.getElementById('input-senbero-desc').value = shop.senberoDesc;
+}
+
+function applyForm(base) {
+  const shop = clone(base);
+  shop.name = val('input-name').trim();
+  shop.genre = val('input-genre').trim();
+  shop.catch = val('input-catch').trim();
+  shop.desc = val('input-desc').trim();
+  shop.address = val('input-address').trim();
+  shop.mapUrl = val('input-mapurl').trim();
+  shop.images = [val('input-img-1').trim(), val('input-img-2').trim(), val('input-img-3').trim()];
+  shop.campaigns = [1, 2, 3].map(function (n) {
+    return {
+      title: val('input-cp' + n + '-title').trim(),
+      desc: val('input-cp' + n + '-desc').trim(),
+      badge: val('input-cp' + n + '-badge').trim() || 'おすすめ'
+    };
+  });
+  shop.senberoTitle = val('input-senbero-title').trim();
+  shop.senberoDesc = val('input-senbero-desc').trim();
+  return shop;
+}
+
+function sliceShop(shop) {
+  return {
+    name: shop.name, genre: shop.genre, catch: shop.catch, desc: shop.desc,
+    address: shop.address, mapUrl: shop.mapUrl, images: shop.images,
+    campaigns: shop.campaigns, senberoTitle: shop.senberoTitle, senberoDesc: shop.senberoDesc
+  };
+}
+
+function isDirty() {
+  const pub = publishedSnapshot[currentEditShopId];
+  const now = applyForm(pub);
+  return JSON.stringify(sliceShop(now)) !== JSON.stringify(sliceShop(pub));
+}
+
+function updateDraftUI() {
+  const pub = publishedSnapshot[currentEditShopId];
+  const now = applyForm(pub);
+  const dirty = JSON.stringify(sliceShop(now)) !== JSON.stringify(sliceShop(pub));
+  document.getElementById('draft-banner').classList.toggle('is-on', dirty);
+  document.getElementById('btn-discard').disabled = !dirty;
+  document.getElementById('btn-save-draft').disabled = !dirty;
+
+  const flags = {
+    name: now.name !== pub.name,
+    genre: now.genre !== pub.genre,
+    catch: now.catch !== pub.catch,
+    desc: now.desc !== pub.desc,
+    address: now.address !== pub.address,
+    map: now.mapUrl !== pub.mapUrl,
+    photos: JSON.stringify(now.images) !== JSON.stringify(pub.images),
+    cp1: JSON.stringify(now.campaigns[0]) !== JSON.stringify(pub.campaigns[0]),
+    cp2: JSON.stringify(now.campaigns[1]) !== JSON.stringify(pub.campaigns[1]),
+    cp3: JSON.stringify(now.campaigns[2]) !== JSON.stringify(pub.campaigns[2]),
+    senbero: now.senberoTitle !== pub.senberoTitle || now.senberoDesc !== pub.senberoDesc
+  };
+  Object.keys(flags).forEach(function (key) {
+    document.getElementById('block-' + key).classList.toggle('is-changed', flags[key]);
+    document.getElementById('changed-' + key).classList.toggle('hidden', !flags[key]);
+  });
+}
+
+function loadEditForm(shopId) {
+  currentEditShopId = shopId;
+  const source = draftShops[shopId] ? clone(draftShops[shopId]) : clone(publishedSnapshot[shopId]);
+  fillForm(source);
+  lockAll();
+  editFormLoadedFor = shopId;
+  document.getElementById('edit-shop-selector').value = shopId;
+  updateDraftUI();
+}
+
+function switchEditShopTarget() {
+  stashDraft(false);
+  currentEditShopId = document.getElementById('edit-shop-selector').value;
+  loadEditForm(currentEditShopId);
+}
+
+function stashDraft(showToast) {
+  const pub = publishedSnapshot[currentEditShopId];
+  const now = applyForm(pub);
+  if (JSON.stringify(sliceShop(now)) === JSON.stringify(sliceShop(pub))) {
+    delete draftShops[currentEditShopId];
+  } else {
+    draftShops[currentEditShopId] = now;
+  }
+  if (showToast) toast('下書きを保存しました。まだ公開されていません');
+}
+
+function saveDraft() {
+  if (!isDirty()) return;
+  stashDraft(true);
+  lockAll();
+  updateDraftUI();
+}
+
+function discardDraft() {
+  delete draftShops[currentEditShopId];
+  loadEditForm(currentEditShopId);
+  toast('編集を破棄しました。公開中の内容に戻しています');
+}
+
+function triggerSamplePhoto(index) {
+  const pools = [
+    [
+      'https://images.unsplash.com/photo-1514933651103-005eec06c04b?auto=format&fit=crop&w=800&q=80',
+      'https://images.unsplash.com/photo-1470337458703-46ad1756a187?auto=format&fit=crop&w=800&q=80',
+      'https://images.unsplash.com/photo-1566417713940-fe7c737a9ef2?auto=format&fit=crop&w=800&q=80'
+    ],
+    [
+      'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?auto=format&fit=crop&w=600&q=80',
+      'https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&w=600&q=80',
+      'https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=600&q=80'
+    ],
+    [
+      'https://images.unsplash.com/photo-1572116469696-31de0f17cc34?auto=format&fit=crop&w=600&q=80',
+      'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=600&q=80',
+      'https://images.unsplash.com/photo-1525268323446-0505b6fe7778?auto=format&fit=crop&w=600&q=80'
+    ]
+  ];
+  const input = document.getElementById('input-img-' + index);
+  const pool = pools[index - 1];
+  const next = pool[(pool.indexOf(input.value) + 1) % pool.length];
+  input.readOnly = false;
+  setSectionLocked('photos', false);
+  input.value = next;
+  updateDraftUI();
+}
+
+function diffRows(pub, now) {
+  const rows = [];
+  function push(label, before, after) {
+    if (before !== after) rows.push({ label: label, before: before, after: after });
+  }
+  push('店舗名', pub.name, now.name);
+  push('ジャンル', pub.genre, now.genre);
+  push('キャッチコピー', pub.catch, now.catch);
+  push('紹介文', pub.desc, now.desc);
+  push('住所', pub.address, now.address);
+  push('地図URL', pub.mapUrl, now.mapUrl);
+  for (let i = 0; i < 3; i++) {
+    if (pub.images[i] !== now.images[i]) rows.push({ label: '写真' + (i + 1), before: '画像を差し替え', after: '新しい画像', image: now.images[i] });
+  }
+  for (let i = 0; i < 3; i++) {
+    push('キャンペーン' + (i + 1), pub.campaigns[i].badge + ' / ' + pub.campaigns[i].title + ' / ' + pub.campaigns[i].desc, now.campaigns[i].badge + ' / ' + now.campaigns[i].title + ' / ' + now.campaigns[i].desc);
+  }
+  push('せんべろセット', pub.senberoTitle + '：' + pub.senberoDesc, now.senberoTitle + '：' + now.senberoDesc);
+  return rows;
+}
+
+function openPreview() {
+  const pub = publishedSnapshot[currentEditShopId];
+  const now = applyForm(pub);
+  if (!now.name) {
+    toast('店舗名を入力してください');
+    return;
+  }
+  const rows = diffRows(pub, now);
+  const changes = rows.length
+    ? rows.map(function (row) {
+      const img = row.image ? '<img src="' + esc(row.image) + '" alt="" class="w-full h-28 object-cover rounded-xl mt-2">' : '';
+      return '<div class="bg-white border border-orange-200 rounded-2xl p-3">'
+        + '<p class="text-sm font-black text-orange-700">' + esc(row.label) + '</p>'
+        + '<p class="text-sm text-stone-500 line-through mt-1">' + esc(row.before) + '</p>'
+        + '<p class="text-base font-bold mt-1">' + esc(row.after) + '</p>' + img + '</div>';
+    }).join('')
+    : '<p class="text-base bg-white rounded-2xl p-4">公開中の内容と同じです。変更はありません。</p>';
+
+  document.getElementById('preview-body').innerHTML = ''
+    + '<p class="text-sm font-bold text-orange-700">お客さまに見えるカード</p>'
+    + '<article class="mt-2 bg-white rounded-3xl overflow-hidden border border-orange-100 shadow-sm">'
+    + '<img src="' + esc(now.images[0]) + '" alt="" class="w-full h-40 object-cover">'
+    + '<div class="p-4"><p class="text-sm font-bold text-orange-700">' + esc(now.genre) + '</p>'
+    + '<h4 class="text-2xl font-black leading-tight">' + esc(now.name) + '</h4>'
+    + '<p class="text-amber-500 text-lg mt-1">' + starIcons(now.rating) + ' <span class="text-wine-900 font-black">' + now.rating + '</span></p>'
+    + '<p class="text-base mt-2 leading-relaxed">' + esc(now.desc) + '</p>'
+    + '<div class="mt-3 bg-orange-50 rounded-2xl p-3"><p class="text-sm font-black text-orange-700">1,000円せんべろセット</p>'
+    + '<p class="font-black text-lg">' + esc(now.senberoTitle) + '</p><p class="text-base">' + esc(now.senberoDesc) + '</p></div>'
+    + '</div></article>'
+    + '<h4 class="font-black text-lg mt-5 mb-2">変わったところ ' + rows.length + '件</h4>'
+    + '<div class="space-y-2">' + changes + '</div>';
+
+  document.getElementById('preview-publish').disabled = rows.length === 0;
+  document.getElementById('preview-modal').classList.add('is-open');
+  document.body.style.overflow = 'hidden';
+}
+
+function closePreview() {
+  document.getElementById('preview-modal').classList.remove('is-open');
+  document.body.style.overflow = '';
+}
+
+function publishDraft() {
+  const pub = publishedSnapshot[currentEditShopId];
+  const now = applyForm(shopsData[currentEditShopId]);
+  if (!now.name) {
+    toast('店舗名を入力してください');
+    return;
+  }
+  if (JSON.stringify(sliceShop(now)) === JSON.stringify(sliceShop(pub))) {
+    toast('変更はないため、公開していません');
+    return;
+  }
+  shopsData[currentEditShopId] = now;
+  publishedSnapshot[currentEditShopId] = clone(now);
+  delete draftShops[currentEditShopId];
+  syncShopSelects();
+  lockAll();
+  updateDraftUI();
+  renderHomeScreen(currentSort);
+  renderMarkers();
+  closePreview();
+  toast('「' + now.name + '」を公開しました。お客さま画面に反映されています');
+}
+
+function onAnalyticsShopChange() {
+  currentAnalyticsShopId = document.getElementById('analytics-shop').value;
+  renderAnalytics();
+}
+
+function sparkline(values) {
+  const w = 140, h = 42;
+  const max = Math.max.apply(null, values);
+  const min = Math.min.apply(null, values);
+  const pts = values.map(function (v, i) {
+    const x = (i / (values.length - 1)) * w;
+    const y = h - ((v - min) / (max - min || 1)) * (h - 6) - 3;
+    return x.toFixed(1) + ',' + y.toFixed(1);
+  }).join(' ');
+  return '<svg viewBox="0 0 ' + w + ' ' + h + '" class="w-full h-12"><polyline fill="none" stroke="#fb923c" stroke-width="3" stroke-linejoin="round" stroke-linecap="round" points="' + pts + '"/></svg>';
+}
+
+function renderAnalytics() {
+  const id = currentAnalyticsShopId;
+  const shop = shopsData[id];
+  const stats = analyticsData[id];
+  const ratingMax = Math.max.apply(null, [1, 2, 3, 4, 5].map(function (n) { return stats.ratings[n]; }));
+  const inflowMax = Math.max.apply(null, stats.inflow.map(function (row) { return row[1]; }));
+  const inflowSum = stats.inflow.reduce(function (sum, row) { return sum + row[1]; }, 0);
+  const top = stats.inflow.slice().sort(function (a, b) { return b[1] - a[1]; });
+
+  const ratingRows = [5, 4, 3, 2, 1].map(function (star) {
+    const count = stats.ratings[star];
+    const width = Math.round((count / ratingMax) * 100);
+    return '<div class="flex items-center gap-2">'
+      + '<span class="w-12 font-black text-amber-500">' + star + '★</span>'
+      + '<div class="flex-1 h-4 bg-orange-50 rounded-full overflow-hidden"><div class="bar-grow h-full bg-gradient-to-r from-orange-500 to-amber-400 rounded-full" style="width:' + width + '%"></div></div>'
+      + '<span class="w-12 text-right font-black">' + count + '人</span></div>';
+  }).join('');
+
+  const inflowRows = top.map(function (row, index) {
+    const from = shopsData[row[0]];
+    const width = Math.max(8, Math.round((row[1] / inflowMax) * 100));
+    const tone = index === 0 ? 'from-amber-300 to-orange-500' : (index === 1 ? 'from-orange-400 to-red-500' : 'from-orange-200 to-amber-500');
+    return '<div class="bg-white/10 rounded-2xl p-3">'
+      + '<div class="flex items-end justify-between gap-2"><p class="font-black text-lg leading-tight">' + esc(from.name) + '</p>'
+      + '<p class="text-3xl font-black text-amber-300 leading-none">' + row[1] + '<span class="text-base text-white">人</span></p></div>'
+      + '<div class="mt-2 h-3 bg-white/10 rounded-full overflow-hidden"><div class="bar-grow h-full rounded-full bg-gradient-to-r ' + tone + '" style="width:' + width + '%"></div></div>'
+      + '<p class="text-sm mt-1 text-amber-100">この店からハシゴしてきた人数</p></div>';
+  }).join('');
+
+  const logs = stats.visits.map(function (row, index) {
+    const fresh = index === 0 && row[1].indexOf('たった今') === 0;
+    return '<li class="flex gap-3 py-3 border-b border-orange-50 last:border-0">'
+      + '<span class="w-10 h-10 rounded-full ' + (fresh ? 'bg-orange-600 text-white' : 'bg-orange-50 text-orange-700') + ' flex items-center justify-center shrink-0"><i class="fa-solid fa-stamp"></i></span>'
+      + '<div><p class="font-black">' + esc(row[0]) + (fresh ? ' ・ 新着' : '') + '</p><p class="text-sm text-stone-600">' + esc(row[1]) + '</p></div></li>';
+  }).join('');
+
+  document.getElementById('analytics-body').innerHTML = ''
+    + '<div class="grid grid-cols-2 gap-3">'
+    + '<article class="bg-white rounded-3xl p-4 border border-orange-100 shadow-sm"><p class="text-sm font-bold text-stone-500">今月の閲覧数</p>'
+    + '<p class="text-4xl font-black text-wine-800 leading-none mt-1">' + stats.pv.toLocaleString('ja-JP') + '</p>'
+    + '<p class="text-sm font-bold text-orange-700 mt-1">先月比 +' + stats.delta + '%</p>' + sparkline(stats.week) + '<p class="text-xs text-stone-500">直近7日のPV</p></article>'
+    + '<article class="bg-white rounded-3xl p-4 border border-orange-100 shadow-sm"><p class="text-sm font-bold text-stone-500">スタンプ配布</p>'
+    + '<p class="text-4xl font-black text-orange-600 leading-none mt-1">' + stats.stamps + '</p>'
+    + '<p class="text-sm font-bold mt-1">今月の枚数</p>'
+    + '<p class="text-sm text-stone-600 mt-3 leading-relaxed">直接来店 ' + stats.direct + '人<br>ハシゴ来店 ' + inflowSum + '人</p></article>'
+    + '</div>'
+    + '<article class="bg-white rounded-3xl p-4 border border-orange-100 shadow-sm"><h2 class="text-lg font-black">評価の内訳</h2>'
+    + '<p class="text-sm text-stone-500 mb-3">★1〜5を付けた人数</p><div class="space-y-2">' + ratingRows + '</div></article>'
+    + '<article class="rounded-3xl p-4 text-white shadow-xl bg-gradient-to-br from-wine-900 via-wine-800 to-[#9a3412]">'
+    + '<p class="inline-flex items-center gap-1 bg-amber-400 text-wine-900 text-sm font-black px-2.5 py-1 rounded-full">目玉</p>'
+    + '<h2 class="text-2xl font-black leading-snug mt-2">お客さんの回遊ルート</h2>'
+    + '<p class="text-base text-amber-50 mt-1">どの店から、自店舗へハシゴしてきたか</p>'
+    + '<div class="mt-4 space-y-2">' + inflowRows + '</div>'
+    + '<div class="mt-4 bg-white text-wine-900 rounded-2xl p-4 text-center">'
+    + '<i class="fa-solid fa-arrow-down text-orange-600"></i>'
+    + '<p class="text-sm font-bold text-orange-700">流入先</p>'
+    + '<p class="text-2xl font-black">' + esc(shop.name) + '</p>'
+    + '<p class="text-lg font-black">ハシゴ来店 合計 ' + inflowSum + '人</p></div>'
+    + '<p class="mt-4 text-lg font-black leading-relaxed">' + esc(shopsData[top[0][0]].name) + 'から' + top[0][1] + '人、' + esc(shopsData[top[1][0]].name) + 'から' + top[1][1] + '人が来ています。</p>'
+    + '</article>'
+    + '<article class="bg-white rounded-3xl p-4 border border-orange-100 shadow-sm"><h2 class="text-lg font-black">スタンプを渡した記録</h2>'
+    + '<p class="text-sm text-stone-500">来店日時の新しい順</p><ul class="mt-1">' + logs + '</ul></article>';
+}
+
+function openAuthModal(type) {
+  document.getElementById('auth-title').textContent = type === 'signup' ? '新規登録' : 'ログイン';
+  document.getElementById('auth-desc').textContent = type === 'signup'
+    ? '登録するとスタンプ帳を保存できます。この画面はデモです。'
+    : '登録済みのメールアドレスでログインできます。この画面はデモです。';
+  document.getElementById('auth-modal').classList.add('is-open');
+  document.body.style.overflow = 'hidden';
+}
+function closeAuthModal() {
+  document.getElementById('auth-modal').classList.remove('is-open');
+  document.body.style.overflow = '';
+}
+function openStampCardModal() {
+  document.getElementById('stamp-modal').classList.add('is-open');
+  document.body.style.overflow = 'hidden';
+}
+function closeStampCardModal() {
+  document.getElementById('stamp-modal').classList.remove('is-open');
+  document.body.style.overflow = '';
+}
+
+buildEditFields();
+syncShopSelects();
+renderHomeScreen('asc');
+updateStampUI();
+document.getElementById('screen-edit').addEventListener('input', updateDraftUI);
+</script>
+</body>
+</html>
